@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Judging Practice Pit</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&display=swap">
+<style>
+/* Layout: one working column like a judging table — question card on top, answer area, then the judge's notes. */
+:root{
+  --bg:#f6f4f0; --surface:#ffffff; --fg:#1d1a16; --muted:#6b645b; --line:#dcd6cc;
+  --accent:#e8701a; --accent-fg:#ffffff; --accent-soft:#fdeadb;
+  --good:#2f7d4f; --warn:#b7791f; --bad:#b83c2b;
+  --display:"Barlow Condensed","Arial Narrow",Impact,sans-serif;
+  --body:"Source Sans 3","Segoe UI",Helvetica,Arial,sans-serif;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#15130f; --surface:#211d18; --fg:#f1ece4; --muted:#a39a8c; --line:#3a332b;
+  --accent:#f28a35; --accent-fg:#1d1a16; --accent-soft:#3a2615;
+  --good:#5fc28a; --warn:#e2a93b; --bad:#ec6b58; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#15130f; --surface:#211d18; --fg:#f1ece4; --muted:#a39a8c; --line:#3a332b;
+  --accent:#f28a35; --accent-fg:#1d1a16; --accent-soft:#3a2615;
+  --good:#5fc28a; --warn:#e2a93b; --bad:#ec6b58; color-scheme:dark }
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:17px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 48px}
+.wrap{max-width:760px;margin:0 auto;display:grid;gap:20px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-block:22px 4px;border-bottom:2px solid var(--fg)}
+h1{font-family:var(--display);font-weight:700;font-size:2.4rem;line-height:1;margin:0;letter-spacing:.01em;text-wrap:balance}
+h1 span{color:var(--accent)}
+.sub{color:var(--muted);font-size:.95rem;margin:0}
+h2{font-family:var(--display);font-weight:600;font-size:1.05rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:999px;padding:6px 14px;font:inherit;font-size:.95rem;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.chip:focus-visible,button:focus-visible,textarea:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:20px}
+.qcard{border-left:6px solid var(--accent)}
+.eyebrow{display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:.85rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.eyebrow b{color:var(--accent);font-weight:600}
+.question{font-family:var(--display);font-weight:600;font-size:1.75rem;line-height:1.15;margin:8px 0 10px;text-wrap:balance}
+.followups{margin:0;padding-left:20px;color:var(--muted);font-size:.98rem}
+.followups li{margin:2px 0}
+.criteria{margin-top:14px;padding-top:12px;border-top:1px dashed var(--line);font-size:.92rem;color:var(--muted)}
+.criteria strong{color:var(--fg);font-weight:600}
+
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+button.primary,button.ghost{font:inherit;font-weight:600;border-radius:8px;padding:10px 18px;cursor:pointer;border:1px solid transparent}
+button.primary{background:var(--accent);color:var(--accent-fg)}
+button.ghost{background:transparent;color:var(--fg);border-color:var(--line)}
+button:disabled{opacity:.45;cursor:not-allowed}
+.mic{display:inline-flex;align-items:center;gap:10px}
+.mic .dot{width:10px;height:10px;border-radius:50%;background:currentColor;opacity:.4}
+.mic[data-live="true"] .dot{opacity:1;animation:pulse 1s infinite}
+@keyframes pulse{50%{transform:scale(1.6);opacity:.5}}
+@media (prefers-reduced-motion:reduce){.mic[data-live="true"] .dot{animation:none}}
+.timer{font-variant-numeric:tabular-nums;font-family:var(--display);font-size:1.5rem;font-weight:600;min-width:4ch}
+.timer.over{color:var(--bad)}
+textarea{width:100%;min-height:150px;font:inherit;font-size:1.05rem;line-height:1.5;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg);resize:vertical}
+.partial{color:var(--muted);font-style:italic;min-height:1.4em;font-size:.95rem}
+.hint{color:var(--muted);font-size:.9rem;margin:6px 0 0}
+.status{font-size:.9rem;color:var(--muted)}
+.status.err{color:var(--bad)}
+
+/* Feedback */
+.score{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.big{font-family:var(--display);font-weight:700;font-size:3rem;line-height:1;font-variant-numeric:tabular-nums}
+.big small{font-size:1.2rem;color:var(--muted);font-weight:600}
+.verdict{font-size:1.05rem}
+.crit{display:grid;gap:8px;margin-top:14px}
+.crit-row{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:start;padding:8px 0;border-top:1px solid var(--line)}
+.pill{font-family:var(--display);font-weight:700;font-size:1rem;padding:2px 8px;border-radius:6px;min-width:3.4ch;text-align:center;color:var(--accent-fg);font-variant-numeric:tabular-nums}
+.pill[data-s="1"],.pill[data-s="2"]{background:var(--bad)}
+.pill[data-s="3"]{background:var(--warn)}
+.pill[data-s="4"],.pill[data-s="5"]{background:var(--good)}
+.crit-row .name{font-weight:600}
+.crit-row .note{color:var(--muted);font-size:.95rem}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-top:14px}
+.cols h3{font-family:var(--display);font-size:1rem;letter-spacing:.06em;text-transform:uppercase;margin:0 0 6px}
+.cols ul{margin:0;padding-left:18px}
+.cols li{margin:4px 0}
+.model{margin-top:14px;padding:12px 14px;background:var(--accent-soft);border-radius:8px}
+.model h3{margin:0 0 4px;font-family:var(--display);font-size:1rem;letter-spacing:.06em;text-transform:uppercase}
+.stream{white-space:pre-wrap;color:var(--muted);font-size:.95rem}
+
+/* History */
+table{width:100%;border-collapse:collapse;font-size:.95rem}
+th,td{text-align:left;padding:8px 6px;border-top:1px solid var(--line);vertical-align:top}
+th{font-family:var(--display);letter-spacing:.06em;text-transform:uppercase;font-size:.85rem;color:var(--muted);border-top:none}
+td.n{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.tscroll{overflow-x:auto}
+.empty{color:var(--muted);font-size:.95rem}
+@media (max-width:480px){ .question{font-size:1.45rem} body{font-size:16px} }
+
+[hidden]{display:none!important}
+.setup{background:var(--accent-soft);border-radius:8px;padding:12px 14px;font-size:.95rem}
+.setup input{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--fg);width:min(100%,260px)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Judging <span>Practice</span> Pit</h1>
+      <p class="sub">FTC BIOBUZZ 2026–27 · questions from the official Judging Question Bank · feedback scored against the Competition Manual award criteria</p>
+    </div>
+  </header>
+
+  <section class="setup" id="setup" hidden>
+    <strong>Team code</strong> — ask your coach, then enter it once:
+    <span class="row" style="margin-top:6px"><input id="teamcode" type="password" autocomplete="off" placeholder="team code"> <button class="primary" id="savecode">Save</button></span>
+  </section>
+
+  <section>
+    <h2>Practice for</h2>
+    <div class="chips" id="chips" role="group" aria-label="Award"></div>
+  </section>
+
+  <section class="card qcard" id="qcard">
+    <div class="eyebrow"><span>Question <b id="qaward">—</b></span><span id="qcount"></span></div>
+    <p class="question" id="qtext">Press “Draw a question” to start.</p>
+    <ul class="followups" id="qfollow"></ul>
+    <div class="criteria" id="qcrit" hidden></div>
+    <div class="row" style="margin-top:14px">
+      <button class="primary" id="draw">Draw a question</button>
+      <button class="ghost" id="hear" hidden>Hear the judge ask it</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Your answer</h2>
+    <div class="row" style="margin-bottom:10px">
+      <button class="primary mic" id="mic" hidden><span class="dot"></span><span id="miclabel">Start speaking</span></button>
+      <span class="timer" id="timer">2:00</span>
+      <span class="status" id="micstatus"></span>
+    </div>
+    <div class="partial" id="partial"></div>
+    <textarea id="answer" placeholder="Speak your answer, or type it here. Judges usually give you about two minutes per question."></textarea>
+    <p class="hint" id="typehint">Speak with the button above, or type. You can edit the transcript before asking for feedback.</p>
+    <div class="row" style="margin-top:12px">
+      <button class="primary" id="grade" disabled>Get judge feedback</button>
+      <button class="ghost" id="clear">Clear</button>
+      <span class="status" id="gradestatus"></span>
+    </div>
+  </section>
+
+  <section class="card" id="feedback" hidden>
+    <h2>Judge’s notes</h2>
+    <div id="fb"></div>
+  </section>
+
+  <section class="card">
+    <h2>This session</h2>
+    <div class="tscroll"><table id="hist" hidden>
+      <thead><tr><th>Award</th><th>Question</th><th style="text-align:right">Score</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+    <p class="empty" id="histempty">No answers graded yet. Scores stay in this browser only.</p>
+  </section>
+</div>
+
+<script>
+// ===================== CONFIGURATION =====================
+// After you deploy the Cloudflare Worker (see README.md), paste its URL here.
+// Leave it empty to run without AI feedback (questions, timer and typing still work).
+const RELAY_URL = "";
+// =========================================================
+
+// ---------- Award criteria (Competition Manual TU01, Section 6.3) ----------
+const AWARDS = {
+  "Think": {
+    blurb: "Recognizes an excellent PORTFOLIO: a clear, organized record of the team's engineering journey.",
+    criteria: [
+      "Evidence of use of the engineering process",
+      "Lessons learned and applied to the robot design",
+      "Comparing choices: looked at different ideas and explained why one was chosen",
+      "Math choices: used math to make robot or programming decisions",
+      "Information easy to read and easy to find (encouraged)"
+    ]
+  },
+  "Connect": {
+    blurb: "Builds meaningful partnerships with the STEM community and has a clear plan for developing team skills.",
+    criteria: [
+      "Professional development: states the team's learning goals",
+      "Professional development: steps taken or planned to reach those goals",
+      "Networking: meaningful in-person or virtual relationships with STEM professionals (encouraged)",
+      "Collaboration: working with the engineering community through mentoring, knowledge sharing, technical guidance (encouraged)"
+    ]
+  },
+  "Reach": {
+    blurb: "Introduced and recruited new people into FIRST through outreach.",
+    criteria: [
+      "Outreach planning: clear outreach objectives",
+      "Outreach planning: the strategy behind the activities",
+      "Outreach planning: how activities support growth of the FIRST community",
+      "Recruitment of new teams, coaches, mentors, or volunteers who had not previously participated",
+      "Communication: serving as an ambassador and increasing public awareness (encouraged)",
+      "Media and promotion: creative, continuously improving outreach materials (encouraged)"
+    ]
+  },
+  "Sustain": {
+    blurb: "Has the leadership, resources, and organizational practices to continue and grow in future seasons.",
+    criteria: [
+      "Organizational sustainability: financial sustainability, season planning, and/or long-term objectives",
+      "Project management: how progress toward the plan is measured, reviewed, and tracked",
+      "Leadership development: defined roles and an intentional process for preparing future leaders (encouraged)",
+      "Risk management: identifying constraints, mitigation strategies, adapting when challenges arise (encouraged)"
+    ]
+  },
+  "Innovate": {
+    blurb: "Designs creative solutions to game challenges; the design is creative, works most of the time, and the thinking behind it is explained.",
+    criteria: [
+      "Engineering competency: examples of engineering work that explain how the design was developed",
+      "The robot or mechanism design is creative, unique, or both",
+      "The creative design is stable and reliable and helps reach game goals most of the time",
+      "Explains how design risks were reduced (encouraged)"
+    ]
+  },
+  "Control": {
+    blurb: "Uses sensors and software to solve game challenges in a creative way (auto, teleop, or both).",
+    criteria: [
+      "Names the hardware or software control components, the challenge each solves, and its function",
+      "Uses one or more solutions that use external feedback to control the robot and improve performance",
+      "Control solution works consistently during most matches (encouraged)",
+      "Can explain how reliable the solution is, by demonstration or by how it could be improved (encouraged)",
+      "Describes what was learned using the engineering process to develop control solutions (encouraged)"
+    ]
+  },
+  "Design": {
+    blurb: "Understands industrial design: balances form, function, and appearance while meeting the needs of the game.",
+    criteria: [
+      "Robot is elegant, efficient (simple to build and operate), and/or practical to maintain",
+      "The entire robot or the detailed process used to create it is considered, not just one component",
+      "Robot stands out for appearance and how well it functions (encouraged)",
+      "Clear reasons behind design choices, such as inspiration or function (encouraged)",
+      "Design works consistently and aligns with the game plan or strategy (encouraged)"
+    ]
+  },
+  "Judges’ Choice": {
+    blurb: "Recognizes unique efforts, performance, or dynamics that do not fit another award category.",
+    criteria: [
+      "Tells a specific, memorable story that shows what makes this team unique",
+      "Gives concrete examples rather than general statements",
+      "Shows how the team's actions reflect FIRST Core Values and Gracious Professionalism",
+      "Each team member can contribute to the answer"
+    ]
+  }
+};
+
+// ---------- Question bank (Judging Question Bank, Rev 25-26.1) ----------
+const Q = [
+ // Think
+ ["Think","Can you describe your team’s brainstorming process?",["As ideas came in, did your team use any trade-off or cost/benefit analysis?","In the end, did your team settle on one design, or were different parts of multiple ideas used?","What methods were used to prove a design would work?"]],
+ ["Think","How did your team improve your robot throughout the season?",["Did your team iterate on a single design?","Did your team ever start over with a new design?","If yes, how did your team determine that a new design was needed?"]],
+ ["Think","Can you tell us an example of a lesson your team learned while working on your robot this season?",["What did your team do differently based on this?"]],
+ ["Think","How did your team track accomplishments or challenges throughout the season?",["What was your team’s biggest accomplishment?","What was your team’s biggest challenge?"]],
+ ["Think","Did your team use a method to measure progress to their goals throughout the season? (For example, “score x number of points by this time in a season.”)",["What method(s) did your team use to track?","How did your team determine if they were going to meet their goals?"]],
+ ["Think","Did your team employ any analysis in making their design decisions?",["How did you approach this?"]],
+ ["Think","How does your team define their Engineering process?",["Did the team find that it worked well for your team?"]],
+ ["Think","What did your team learn this season?",["How did your mentors contribute to your learning?"]],
+ ["Think","How did your team decide what aspects of their robot needed to be improved?",["What types of data did the team use to determine this?"]],
+ // Connect
+ ["Connect","How did your team set your goals and strategies for this season?",["Does your team have a learning plan for the team?","Is your team meeting your goals?"]],
+ ["Connect","Does your team reach out to new STEM professionals?",["In what way(s)? Can you give us some examples?"]],
+ ["Connect","Have any STEM professionals become a Mentor for your team?",["Can you give us some examples of the skills your team has learned from these professionals?"]],
+ ["Connect","Did your team create a learning plan this season?",["If so, how did your team decide what should be on the plan for each team member?","If not, how did your team determine what skills or training was needed to meet your goals?"]],
+ ["Connect","What skills have your team learned by being a part of the team?",["What impact has learning this new skill meant to your team?"]],
+ ["Connect","How does your team work with other FIRST teams in your area?",["How did your team choose what activities to collaborate on?"]],
+ ["Connect","Has your team collaborated with FIRST teams outside of your area online or virtually?",["What has your team learned from this collaboration?"]],
+ // Reach
+ ["Reach","Does your team perform any type of community service or outreach?",["What activities has your team participated in to introduce people to FIRST?","What are your objectives when you participate in these activities?"]],
+ ["Reach","Who organizes your team or organization’s outreach or community service activities?",["What planning tools did your team use to organize these events?"]],
+ ["Reach","What has resulted from your team’s FIRST outreach activities?",["How did your team’s outreach approach support the FIRST community?"]],
+ ["Reach","Has your team been able to successfully recruit anyone to participate in FIRST?",["Can you give examples of individuals who are now involved in FIRST?","What are their contributions to the FIRST program?"]],
+ ["Reach","Do you consider your team to be an ambassador for FIRST?",["If so, what does your team do to be an ambassador?","What impact is your team having on the FIRST community?"]],
+ ["Reach","How do you market your team?",["How does your team help to increase awareness of FIRST?","How does your team add creativity to your marketing efforts?"]],
+ ["Reach","Has your team received any feedback on your marketing efforts?",["What has your team changed or edited based on this feedback?"]],
+ ["Reach","How has your team raised the profile of FIRST with your efforts?",["Does your team have any specific examples where your efforts had an impact?"]],
+ // Sustain
+ ["Sustain","Does your team have a sustainability plan?",["What does that look like?"]],
+ ["Sustain","How does your team fundraise or raise funds for your activities?",["Does your team have a budget?","How is your team’s budget allocated, and who is involved in that process?"]],
+ ["Sustain","Does your team have a timeline for this season that aligns with your goals?",[]],
+ ["Sustain","How are responsibilities assigned and tracked over the course of a season?",[]],
+ ["Sustain","Do each of your team members have a specific role or sub-team?",["How are your leadership roles defined or set each season?","How did your team make decisions about assigning roles for the team?"]],
+ ["Sustain","How do you ensure new, or potential team members feel connected and engaged with the team from the start?",[]],
+ ["Sustain","How do you help grow team members into future leaders of the team?",[]],
+ ["Sustain","How does your team balance short-term needs with long-term planning?",[]],
+ ["Sustain","What gets in the way of your team doing its best work, apart from time?",["How does your team respond to those challenges?","How does your team manage risks that can affect the team’s dynamic?"]],
+ ["Sustain","How does your team plan their season’s efforts?",["How did your team decide what items should be added to the plan?","What tools did your team use?","How does your team assign effort and track progress?"]],
+ ["Sustain","Does your team have a plan for maintaining or sustaining their finances without relying on a single or few large sources of income?",["How does your team track and measure the success of this plan?","How does your team ensure that your team’s plan is communicated to all team members?"]],
+ // Innovate
+ ["Innovate","How does your team brainstorm ideas?",["How did your team decide which ideas to implement?"]],
+ ["Innovate","Walk us through the process that your team used to come up with your design.",["Did your process change through the season?","If so, why?","If not, why not?"]],
+ ["Innovate","What were your team’s overall goals and/or strategies for this season?",[]],
+ ["Innovate","Is there an aspect of your robot that you consider unique or creative?",[]],
+ ["Innovate","How did your team evaluate your design to ensure that it met your team’s goals?",[]],
+ ["Innovate","What criteria or process did your team use to determine the success of the design?",[]],
+ ["Innovate","Which of your team’s game objectives does your robot achieve?",["What actions or tasks within a match is it able to reliably score in?","How did your team test for reliability?","Did your team evaluate other factors?"]],
+ ["Innovate","How did your team capture what worked and what did not work with the robot?",[]],
+ ["Innovate","Did your team take any risks or unique approaches when building the robot for this season?",[]],
+ ["Innovate","Can you tell us what evolution or iteration that your robot features took this season?",["Did your team use any process for determining what changes to make?"]],
+ ["Innovate","What risks did your team identify with your design?",["What has your team changed or edited based on the risk(s)?","How did your team determine if that risk was mitigated?","Can you tell us about the trade-offs that your team looked at?","Can you tell us about any unexpected failures that your team encountered along the way and what you did about that?"]],
+ // Control
+ ["Control","What sensors and hardware did your team use on your robot?",["What worked, what did not, and why?"]],
+ ["Control","Can you talk about the code used on the robot?",["What pre-programmed libraries or outside resources did your team use to program your robot?","Did your team write any custom libraries or routines to handle specific functions on your robot?"]],
+ ["Control","Which software solutions worked, which did not, and why?",[]],
+ ["Control","How did your team capture their learnings with what worked and what did not work?",[]],
+ ["Control","What criteria or process did your team use to determine if a component is working or not working?",[]],
+ ["Control","How does your robot know where it is on the field, control acquisition of scoring elements in Auto and/or Teleop, and measure and control the speed of the motors?",["Know where it is on the field?","Control acquisition of scoring elements in Auto and/or Teleop?","Measure and control the speed of the motors?"]],
+ ["Control","What enhancements did your team program to assist the drivers during Teleop?",[]],
+ ["Control","What were your team’s design goals for the Auto period?",[]],
+ ["Control","What specific game tasks was your team trying to improve or solve with your control system?",[]],
+ ["Control","Describe the engineering process your team followed to develop your robot's most complex autonomous routine or control feature.",["Did you find that it worked well for your team?","What was the biggest obstacle or failure your team encountered?","How did your team measure reliability?"]],
+ // Design
+ ["Design","How did your team come up with the overall design of your robot?",[]],
+ ["Design","How did your team balance competing factors in your design?",[]],
+ ["Design","What game or design strategies did your team outline at the beginning of the season?",["How does your robot meet these strategies?"]],
+ ["Design","How does your team measure effectiveness in meeting your team goals for the robot’s performance?",[]],
+ ["Design","What tools did your team use to brainstorm or evaluate different design elements for your robot?",[]],
+ ["Design","What process did your team use to determine if a specific design element helps to meet your team’s goals?",[]],
+ ["Design","How did your team document your goals?",["What planning did you do to ensure you were going to meet your goals?"]],
+ ["Design","Did your team look at how components work together when designing your robot?",["Did you look at each component separately or as a single system or sub-systems?","How did this affect your design process?"]],
+ ["Design","Did you have to make any compromises on your design from your goals?",["If so, what did you do?"]],
+ ["Design","How does your team balance functionality, simplicity, and reliability?",[]],
+ ["Design","What specific problem did your team encounter during your season that influenced the current design of your robot?",[]],
+ ["Design","What did your team choose to optimize on the robot if you could not do everything?",[]],
+ ["Design","Did your team's solution originate from an existing design (e.g., in industry, another sport, or a previous season), or was it a completely novel concept?",["How did your team translate that inspiration into a functional design?","Did your team have to compromise or change any of your goals for playing this year’s game?"]],
+ // Judges' Choice
+ ["Judges’ Choice","We know that every team has challenges. Can you tell us a little about how your team successfully overcame the challenges you encountered this season?",[]],
+ ["Judges’ Choice","How would your team describe your season and why?",[]],
+ ["Judges’ Choice","Tell us your story – how is your team making a difference through FIRST?",[]],
+ ["Judges’ Choice","Can you give us a couple of examples to tell us what has it meant to you to be on a FIRST team?",[]],
+ ["Judges’ Choice","In what ways is your team unique?",[]],
+ ["Judges’ Choice","What is the one thing that we did not ask about that you most want the Judges to know?",[]],
+ ["Judges’ Choice","If you could select one achievement this season—whether it is a specific robot feature, a unique team dynamic, or a community project—that you feel no other team has replicated, what would that be, and why does it represent your team's unique identity?",[]],
+ ["Judges’ Choice","Tell us about a significant non-robotics challenge your team faced this season, such as sustainability, a logistical hurdle, or funding.",["How did you overcome this?"]],
+ ["Judges’ Choice","Does your team have any individuals or subgroups in your team that have a huge impact on the team but do not fit into a traditional team role?",[]],
+ ["Judges’ Choice","Describe a major failure or setback your team experienced—it could be a robot component failure, a lost grant, or a team conflict.",["How did this failure force your team to think differently, leading to an unforeseen positive outcome or discovery that has changed how your team operates?"]],
+ ["Judges’ Choice","(New Team) How did your team quickly bridge the knowledge gap to become competitive? (Experienced Team) How did your team’s knowledge transfer lead to a part or subsystem that was completely built and owned by a new member?",[]],
+ ["Judges’ Choice","Does your team have any process to ensure the often 'unseen' essential tasks (like detailed wiring organization, safety compliance, or sponsor communication) are consistently valued, documented, and fully integrated into your season plan?",["What does that look like?"]],
+ ["Judges’ Choice","How did your team come together?",["Did you know each other before being on the same FIRST Tech Challenge team?"]]
+].map(([award,text,follow])=>({award,text,follow}));
+
+// ---------- State ----------
+const $ = s => document.querySelector(s);
+let filter = "All", current = null, recent = [], history = [];
+let timerId = null, seconds = 120, teamCode = "";
+try { history = JSON.parse(localStorage.getItem("jp.history") || "[]"); } catch(e){ history = []; }
+try { filter = localStorage.getItem("jp.filter") || "All"; } catch(e){}
+try { teamCode = localStorage.getItem("jp.code") || ""; } catch(e){}
+
+// ---------- Team code ----------
+if (RELAY_URL) {
+  $("#setup").hidden = !!teamCode;
+  $("#savecode").addEventListener("click", () => {
+    teamCode = $("#teamcode").value.trim();
+    try { localStorage.setItem("jp.code", teamCode); } catch(e){}
+    $("#setup").hidden = !!teamCode;
+  });
+} else {
+  $("#typehint").textContent = "AI feedback is not set up on this site yet (see README). You can still draw questions and time your answers.";
+}
+
+// ---------- Chips ----------
+const chipNames = ["All", ...Object.keys(AWARDS)];
+const chips = $("#chips");
+chipNames.forEach(n => {
+  const b = document.createElement("button");
+  b.className = "chip"; b.textContent = n; b.setAttribute("aria-pressed", String(n === filter));
+  b.addEventListener("click", () => {
+    filter = n; try{ localStorage.setItem("jp.filter", n);}catch(e){}
+    chips.querySelectorAll(".chip").forEach(c => c.setAttribute("aria-pressed", String(c.textContent === n)));
+    updateCount();
+  });
+  chips.appendChild(b);
+});
+function pool(){ return filter === "All" ? Q : Q.filter(q => q.award === filter); }
+function updateCount(){ $("#qcount").textContent = pool().length + " in bank"; }
+updateCount();
+
+// ---------- Draw ----------
+$("#draw").addEventListener("click", () => {
+  const p = pool().filter(q => !recent.includes(q));
+  const src = p.length ? p : pool();
+  const pick = src[Math.floor(Math.random() * src.length)];
+  recent.push(pick); if (recent.length > 8) recent.shift();
+  showQuestion(pick);
+});
+function showQuestion(q){
+  current = q;
+  $("#qaward").textContent = q.award + " Award";
+  $("#qtext").textContent = q.text;
+  const ul = $("#qfollow"); ul.innerHTML = "";
+  q.follow.forEach(f => { const li = document.createElement("li"); li.textContent = f; ul.appendChild(li); });
+  const a = AWARDS[q.award];
+  const c = $("#qcrit");
+  c.innerHTML = "<strong>What judges listen for:</strong> " + a.criteria.map(x => x.replace(/ \(encouraged\)$/,"")).join(" · ");
+  c.hidden = false;
+  $("#draw").textContent = "Draw another";
+  $("#hear").hidden = !("speechSynthesis" in window);
+  resetAnswer();
+  $("#feedback").hidden = true;
+}
+
+// ---------- Timer ----------
+function fmt(s){ const m = Math.floor(Math.abs(s)/60), r = Math.abs(s)%60; return (s<0?"−":"") + m + ":" + String(r).padStart(2,"0"); }
+function startTimer(){ stopTimer(); seconds = 120; renderTimer(); timerId = setInterval(() => { seconds--; renderTimer(); }, 1000); }
+function stopTimer(){ if (timerId) clearInterval(timerId); timerId = null; }
+function renderTimer(){ const t = $("#timer"); t.textContent = fmt(seconds); t.classList.toggle("over", seconds < 0); }
+
+// ---------- Answer box ----------
+const answer = $("#answer");
+answer.addEventListener("input", syncGrade);
+function syncGrade(){ $("#grade").disabled = !(current && answer.value.trim().length > 0); }
+function resetAnswer(){ answer.value = ""; $("#partial").textContent = ""; stopListening(); stopTimer(); seconds = 120; renderTimer(); $("#gradestatus").textContent = ""; syncGrade(); }
+$("#clear").addEventListener("click", resetAnswer);
+
+// ---------- Speech recognition (browser built-in; Chrome / Edge / Safari) ----------
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const mic = $("#mic"), micLabel = $("#miclabel"), micStatus = $("#micstatus");
+let rec = null, listening = false, wantListening = false;
+if (SR) {
+  mic.hidden = false;
+  mic.addEventListener("click", () => { if (listening) stopListening(); else startListening(); });
+} else {
+  $("#typehint").textContent += " Voice input needs Chrome, Edge or Safari; type your answer here.";
+}
+function startListening(){
+  if (!SR) return;
+  rec = new SR(); rec.lang = "en-US"; rec.continuous = true; rec.interimResults = true;
+  let finalSoFar = answer.value;
+  rec.onresult = e => {
+    let interim = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) { finalSoFar = (finalSoFar + " " + t).replace(/\s+/g," ").trim(); answer.value = finalSoFar; syncGrade(); }
+      else interim += t;
+    }
+    $("#partial").textContent = interim;
+  };
+  rec.onstart = () => { listening = true; mic.dataset.live = "true"; micLabel.textContent = "Stop"; micStatus.className = "status"; micStatus.textContent = "Listening — speak as you would to a judge."; };
+  rec.onerror = e => {
+    micStatus.className = "status err";
+    micStatus.textContent = e.error === "not-allowed" ? "Microphone not allowed. Check the browser’s site permissions, or type your answer."
+      : e.error === "no-speech" ? "Didn’t hear anything. Click Start and try again."
+      : "Microphone error (" + e.error + "). Type your answer instead.";
+    if (e.error === "not-allowed") wantListening = false;
+  };
+  rec.onend = () => {
+    listening = false; mic.dataset.live = "false"; micLabel.textContent = "Start speaking"; $("#partial").textContent = "";
+    // Chrome stops after ~60 s of continuous audio; restart quietly while the student still wants to talk.
+    if (wantListening) { try { rec.start(); } catch(e){ wantListening = false; } }
+    else micStatus.textContent = "";
+  };
+  wantListening = true;
+  if (!timerId) startTimer();
+  try { rec.start(); } catch(e){ micStatus.className = "status err"; micStatus.textContent = "Couldn’t start the microphone."; }
+}
+function stopListening(){ wantListening = false; if (rec && listening) { try { rec.stop(); } catch(e){} } }
+
+// ---------- Hear the question ----------
+$("#hear").addEventListener("click", () => {
+  if (!current || !("speechSynthesis" in window)) return;
+  const line = current.text + (current.follow.length ? " " + current.follow[0] : "");
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(line); u.lang = "en-US"; u.rate = 0.95;
+  const v = speechSynthesis.getVoices().find(v => v.lang.startsWith("en") && /Google|Natural|Samantha|Aria|Jenny/.test(v.name));
+  if (v) u.voice = v;
+  speechSynthesis.speak(u);
+});
+
+// ---------- Feedback via relay ----------
+$("#grade").addEventListener("click", async () => {
+  if (!current) return;
+  stopListening(); stopTimer();
+  const text = answer.value.trim();
+  if (!text) return;
+  const btn = $("#grade"); btn.disabled = true;
+  const st = $("#gradestatus"); st.className = "status"; st.textContent = "";
+  const fb = $("#fb"); $("#feedback").hidden = false;
+  if (!RELAY_URL) { fb.innerHTML = "<p class='empty'>AI feedback isn’t set up on this site. Review your answer against the “What judges listen for” list above: did you give a specific example for each item, and did you say how you measured or tested it?</p>"; btn.disabled = false; return; }
+  if (!teamCode) { $("#setup").hidden = false; fb.innerHTML = "<p class='empty'>Enter the team code at the top of the page first.</p>"; btn.disabled = false; return; }
+  fb.innerHTML = '<p class="stream">Judge is writing notes…</p>';
+  const a = AWARDS[current.award];
+  const spoken = Math.max(60, Math.round(120 - seconds));
+  try {
+    const r = await fetch(RELAY_URL, { method: "POST", headers: { "Content-Type": "application/json", "X-Team-Code": teamCode },
+      body: JSON.stringify({ award: current.award, blurb: a.blurb, criteria: a.criteria, question: current.text, followups: current.follow, answer: text, seconds: spoken }) });
+    if (r.status === 401) { fb.innerHTML = "<p class='empty'>That team code isn’t right. Ask your coach and enter it again.</p>"; try{localStorage.removeItem("jp.code");}catch(e){} teamCode = ""; $("#setup").hidden = false; return; }
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const data = await r.json();
+    renderFeedback(data);
+    history.unshift({ award: current.award, q: current.text, score: data.overall, t: Date.now() });
+    history = history.slice(0, 50);
+    try { localStorage.setItem("jp.history", JSON.stringify(history)); } catch(e){}
+    renderHistory();
+  } catch (err) {
+    st.className = "status err"; st.textContent = "Feedback failed (" + err.message + "). Check your connection and try again."; fb.innerHTML = "";
+  } finally { btn.disabled = false; }
+});
+
+function el(tag, cls, text){ const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+function renderFeedback(d){
+  const fb = $("#fb"); fb.innerHTML = "";
+  const score = el("div","score");
+  const big = el("div","big", String(d.overall)); big.appendChild(el("small",null," / 5")); score.appendChild(big);
+  score.appendChild(el("p","verdict", d.verdict || "")); fb.appendChild(score);
+  const crit = el("div","crit");
+  (d.criteria || []).forEach(c => {
+    const row = el("div","crit-row");
+    const p = el("span","pill", String(c.score)); p.dataset.s = String(Math.min(5, Math.max(1, Math.round(c.score)||1)));
+    row.appendChild(p);
+    const txt = el("div"); txt.appendChild(el("div","name", c.name)); txt.appendChild(el("div","note", c.note)); row.appendChild(txt);
+    crit.appendChild(row);
+  });
+  fb.appendChild(crit);
+  const cols = el("div","cols");
+  const list = (title, items) => { const b = el("div"); b.appendChild(el("h3",null,title)); const ul = el("ul"); (items||[]).forEach(i => ul.appendChild(el("li",null,i))); b.appendChild(ul); return b; };
+  cols.appendChild(list("What worked", d.strengths));
+  cols.appendChild(list("Make it stronger", d.improve));
+  cols.appendChild(list("Judges will probably ask next", d.followups));
+  fb.appendChild(cols);
+  if (d.model) { const m = el("div","model"); m.appendChild(el("h3",null,"A stronger version might sound like")); m.appendChild(el("p",null,d.model)); fb.appendChild(m); }
+  $("#feedback").scrollIntoView({behavior:"smooth", block:"start"});
+}
+function renderHistory(){
+  const tb = $("#hist tbody"); tb.innerHTML = "";
+  $("#hist").hidden = history.length === 0; $("#histempty").hidden = history.length > 0;
+  history.forEach(h => {
+    const tr = el("tr");
+    tr.appendChild(el("td",null,h.award)); tr.appendChild(el("td",null,h.q)); tr.appendChild(el("td","n", h.score + " / 5"));
+    tb.appendChild(tr);
+  });
+}
+renderHistory();
+</script>
+</body>
+</html>
