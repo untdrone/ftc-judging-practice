@@ -535,7 +535,7 @@ $("#hints").addEventListener("click", async () => {
       const r = await fetch(RELAY_URL, { method: "POST", headers: { "Content-Type": "application/json", "X-Team-Code": teamCode },
         body: JSON.stringify({ mode: "hints", award: current.award, blurb: a.blurb, criteria: a.criteria, question: current.text, followups: current.follow, team: TEAM }) });
       if (r.status === 401) { st.textContent = "That team code isn’t right."; st.className = "status err"; return; }
-      if (!r.ok) throw new Error("HTTP " + r.status);
+      if (!r.ok) { let d = ""; try { const e = await r.json(); d = e.detail || e.error || ""; } catch(_){} throw new Error("HTTP " + r.status + (d ? ": " + String(d).slice(0, 300) : "")); }
       hintCache[key] = await r.json();
     } catch (e) { st.className = "status err"; st.textContent = "Couldn’t load talking points (" + e.message + ")."; return; }
     finally { btn.disabled = false; }

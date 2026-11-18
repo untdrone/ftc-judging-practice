@@ -71,9 +71,9 @@ QUESTION: ${question}${followups.length ? "\nFOLLOW-UPS: " + followups.join(" | 
 
 Write 4-6 short talking points a student on THIS team should hit when answering, drawn only from the fact sheet (never invent facts; if the sheet has nothing for a point, say what kind of detail the student should add from their own experience, in [brackets]). Each point: one line, concrete, with the real numbers, names of events, tools or methods from the sheet. Then one line "Shape:" describing a 60-90 second structure for the answer.
 Return ONLY JSON: {"points": ["..."], "shape": "..."}`;
-      const hr = await callClaude(env, hp, 900);
+      const hr = await callClaude(env, hp, 1800);
       if (!hr.ok) return json({ error: "upstream " + hr.status, detail: hr.detail }, 502, cors);
-      try { return json(extractJson(hr.text), 200, cors); } catch { return json({ error: "could not parse hints", detail: hr.text.slice(0, 400) }, 502, cors); }
+      try { return json(parseLoose(hr.text), 200, cors); } catch { return json({ error: "could not parse hints", detail: "stop_reason=" + hr.out.stop_reason + "; reply: " + hr.text.slice(0, 400) }, 502, cors); }
     }
 
     if (!answer) return json({ error: "missing fields" }, 400, cors);
@@ -123,21 +123,7 @@ Score every criterion listed above, in order. Use 1 = not addressed, 3 = mention
       return json(fb, 200, cors);
     };
     try {
-      let t = text.replace(/```(?:json)?/gi, "").trim();
-      const start = t.indexOf("{"), end = t.lastIndexOf("}");
-      if (start < 0) throw new Error("no JSON");
-      if (end > start) { try { return await done(JSON.parse(t.slice(start, end + 1))); } catch {} }
-      // Tolerate a reply cut off mid-way: close any open strings, arrays and objects.
-      t = t.slice(start);
-      const stack = []; let inStr = false, esc = false;
-      for (const ch of t) {
-        if (inStr) { if (esc) esc = false; else if (ch === "\\") esc = true; else if (ch === '"') inStr = false; continue; }
-        if (ch === '"') inStr = true; else if (ch === "{") stack.push("}"); else if (ch === "[") stack.push("]"); else if (ch === "}" || ch === "]") stack.pop();
-      }
-      if (inStr) t += '"';
-      t = t.replace(/,\s*$/, "").replace(/:\s*$/, ': null');
-      t += stack.reverse().join("");
-      return await done(JSON.parse(t));
+      return await done(parseLoose(text));
     } catch {
       return json({ error: "could not parse feedback", detail: "stop_reason=" + out.stop_reason + "; reply: " + text.slice(0, 400) }, 502, cors);
     }
@@ -159,8 +145,20 @@ async function callClaude(env, prompt, maxTokens) {
   return { ok: true, out, text: (out.content || []).map(c => c.text || "").join("") };
 }
 
-function extractJson(text) {
-  const t = text.replace(/```(?:json)?/gi, "").trim();
+// Parse JSON out of a model reply, tolerating prose around it, code fences, and a reply cut off mid-way.
+function parseLoose(text) {
+  let t = text.replace(/```(?:json)?/gi, "").trim();
   const start = t.indexOf("{"), end = t.lastIndexOf("}");
-  return JSON.parse(t.slice(start, end + 1));
+  if (start < 0) throw new Error("no JSON");
+  if (end > start) { try { return JSON.parse(t.slice(start, end + 1)); } catch {} }
+  t = t.slice(start);
+  const stack = []; let inStr = false, esc = false;
+  for (const ch of t) {
+    if (inStr) { if (esc) esc = false; else if (ch === "\\") esc = true; else if (ch === '"') inStr = false; continue; }
+    if (ch === '"') inStr = true; else if (ch === "{") stack.push("}"); else if (ch === "[") stack.push("]"); else if (ch === "}" || ch === "]") stack.pop();
+  }
+  if (inStr) t += '"';
+  t = t.replace(/,\s*$/, "").replace(/:\s*$/, ": null");
+  t += stack.reverse().join("");
+  return JSON.parse(t);
 }
