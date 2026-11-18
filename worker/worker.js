@@ -78,12 +78,12 @@ Score every criterion listed above, in order. Use 1 = not addressed, 3 = mention
       body: JSON.stringify({
         model: env.MODEL || "claude-sonnet-5-5",
         max_tokens: 1200,
-        messages: [{ role: "user", content: prompt }, { role: "assistant", content: "{" }],
+        messages: [{ role: "user", content: prompt }],
       }),
     });
     if (!r.ok) return json({ error: "upstream " + r.status, detail: await r.text() }, 502, cors);
     const out = await r.json();
-    const text = "{" + (out.content || []).map(c => c.text || "").join("");
+    const text = (out.content || []).map(c => c.text || "").join("");
     try {
       const start = text.indexOf("{"), end = text.lastIndexOf("}");
       return json(JSON.parse(text.slice(start, end + 1)), 200, cors);
