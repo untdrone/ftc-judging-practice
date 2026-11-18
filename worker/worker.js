@@ -88,9 +88,9 @@ Score every criterion listed above, in order. Use 1 = not addressed, 3 = mention
       let t = text.replace(/```(?:json)?/gi, "").trim();
       const start = t.indexOf("{"), end = t.lastIndexOf("}");
       if (start < 0) throw new Error("no JSON");
-      t = t.slice(start, end > start ? end + 1 : undefined);
+      if (end > start) { try { return json(JSON.parse(t.slice(start, end + 1)), 200, cors); } catch {} }
       // Tolerate a reply cut off mid-way: close any open strings, arrays and objects.
-      try { return json(JSON.parse(t), 200, cors); } catch {}
+      t = t.slice(start);
       const stack = []; let inStr = false, esc = false;
       for (const ch of t) {
         if (inStr) { if (esc) esc = false; else if (ch === "\\") esc = true; else if (ch === '"') inStr = false; continue; }
