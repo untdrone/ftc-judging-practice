@@ -8,6 +8,9 @@
  * Secrets to set in the Cloudflare dashboard (Settings → Variables and Secrets):
  *   ANTHROPIC_API_KEY  — from https://console.anthropic.com
  *   TEAM_CODE          — any word/phrase you give your students (e.g. "biobuzz2027")
+ *   COACH_CODE         — a different code only coaches know; unlocks the practice log
+ * Binding (Settings → Bindings → Add → KV namespace):
+ *   ATTEMPTS           — a KV namespace; every graded answer is stored here for the coach view
  * Optional variables:
  *   ALLOWED_ORIGIN     — your GitHub Pages URL, e.g. https://yourname.github.io
  *                        (leave unset while testing; set it before sharing widely)
@@ -21,13 +24,31 @@ export default {
     const cors = {
       "Access-Control-Allow-Origin": allowOrigin || "null",
       "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, X-Team-Code",
+      "Access-Control-Allow-Headers": "Content-Type, X-Team-Code, X-Coach-Code",
       "Content-Type": "application/json",
     };
 
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
-    if (request.method !== "POST") return json({ error: "POST only" }, 405, cors);
     if (env.ALLOWED_ORIGIN && !allowOrigin) return json({ error: "origin not allowed" }, 403, cors);
+
+    // ---- Coach view: GET /log  (header X-Coach-Code) → every stored attempt, newest first
+    const url = new URL(request.url);
+    if (request.method === "GET" && url.pathname === "/log") {
+      if (!env.COACH_CODE || request.headers.get("X-Coach-Code") !== env.COACH_CODE) return json({ error: "bad coach code" }, 401, cors);
+      if (!env.ATTEMPTS) return json({ error: "storage not set up: add a KV binding named ATTEMPTS to this worker" }, 500, cors);
+      const listed = await env.ATTEMPTS.list({ prefix: "a:", limit: 1000 });
+      const keys = listed.keys.slice(0, 300);
+      const rows = await Promise.all(keys.map(async k => { try { return JSON.parse(await env.ATTEMPTS.get(k.name)); } catch { return null; } }));
+      return json({ attempts: rows.filter(Boolean), total: listed.keys.length }, 200, cors);
+    }
+    if (request.method === "DELETE" && url.pathname === "/log") {
+      if (!env.COACH_CODE || request.headers.get("X-Coach-Code") !== env.COACH_CODE) return json({ error: "bad coach code" }, 401, cors);
+      const id = url.searchParams.get("id");
+      if (!id || !env.ATTEMPTS) return json({ error: "missing id" }, 400, cors);
+      await env.ATTEMPTS.delete(id);
+      return json({ ok: true }, 200, cors);
+    }
+    if (request.method !== "POST") return json({ error: "POST only" }, 405, cors);
 
     if (!env.TEAM_CODE || request.headers.get("X-Team-Code") !== env.TEAM_CODE) {
       return json({ error: "bad team code" }, 401, cors);
@@ -35,7 +56,7 @@ export default {
 
     let body;
     try { body = await request.json(); } catch { return json({ error: "bad JSON" }, 400, cors); }
-    const { award, blurb, criteria, question, followups = [], answer, seconds = 90 } = body || {};
+    const { award, blurb, criteria, question, followups = [], answer, seconds = 90, student = "" } = body || {};
     if (!award || !question || !answer || !Array.isArray(criteria)) return json({ error: "missing fields" }, 400, cors);
     if (answer.length > 6000) return json({ error: "answer too long" }, 413, cors);
 
@@ -84,11 +105,21 @@ Score every criterion listed above, in order. Use 1 = not addressed, 3 = mention
     if (!r.ok) return json({ error: "upstream " + r.status, detail: await r.text() }, 502, cors);
     const out = await r.json();
     const text = (out.content || []).map(c => c.text || "").join("");
+    const done = async (fb) => {
+      if (env.ATTEMPTS && fb && typeof fb.overall === "number") {
+        const t = Date.now();
+        const id = "a:" + String(1e13 - t).padStart(13, "0") + ":" + Math.random().toString(36).slice(2, 8);
+        const rec = { id, t, student: String(student).slice(0, 60) || "Unnamed", award, question, answer: answer.slice(0, 4000), seconds,
+                      overall: fb.overall, verdict: fb.verdict || "", criteria: fb.criteria || [], improve: fb.improve || [] };
+        try { await env.ATTEMPTS.put(id, JSON.stringify(rec)); } catch {}
+      }
+      return json(fb, 200, cors);
+    };
     try {
       let t = text.replace(/```(?:json)?/gi, "").trim();
       const start = t.indexOf("{"), end = t.lastIndexOf("}");
       if (start < 0) throw new Error("no JSON");
-      if (end > start) { try { return json(JSON.parse(t.slice(start, end + 1)), 200, cors); } catch {} }
+      if (end > start) { try { return await done(JSON.parse(t.slice(start, end + 1))); } catch {} }
       // Tolerate a reply cut off mid-way: close any open strings, arrays and objects.
       t = t.slice(start);
       const stack = []; let inStr = false, esc = false;
@@ -99,7 +130,7 @@ Score every criterion listed above, in order. Use 1 = not addressed, 3 = mention
       if (inStr) t += '"';
       t = t.replace(/,\s*$/, "").replace(/:\s*$/, ': null');
       t += stack.reverse().join("");
-      return json(JSON.parse(t), 200, cors);
+      return await done(JSON.parse(t));
     } catch {
       return json({ error: "could not parse feedback", detail: "stop_reason=" + out.stop_reason + "; reply: " + text.slice(0, 400) }, 502, cors);
     }

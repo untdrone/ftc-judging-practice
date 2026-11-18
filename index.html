@@ -34,6 +34,13 @@ header>div{flex:1 1 300px;min-width:0}
 .celebrate .logo{height:44px;animation:wiggle .9s ease-in-out 2}
 @keyframes wiggle{0%,100%{transform:rotate(0)}25%{transform:rotate(-8deg)}75%{transform:rotate(8deg)}}
 #confetti{position:fixed;inset:0;pointer-events:none;z-index:50}
+details.att{border-top:1px solid var(--line);padding:8px 0}
+details.att summary{cursor:pointer;display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;list-style:none}
+details.att summary::-webkit-details-marker{display:none}
+details.att .meta{color:var(--muted);font-size:.9rem}
+details.att .body{margin:10px 0 4px 0;display:grid;gap:8px;font-size:.95rem}
+details.att blockquote{margin:0;padding:8px 12px;border-left:3px solid var(--line);color:var(--fg);white-space:pre-wrap}
+.chip.small{padding:3px 10px;font-size:.85rem}
 @media (prefers-reduced-motion:reduce){.celebrate .logo{animation:none}}
 h1{font-family:var(--display);font-weight:700;font-size:2.4rem;line-height:1;margin:0;letter-spacing:.01em;text-wrap:balance}
 h1 span{color:var(--accent)}
@@ -119,8 +126,9 @@ td.n{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
   </header>
 
   <section class="setup" id="setup" hidden>
-    <strong>Team code</strong> — ask your coach, then enter it once:
-    <span class="row" style="margin-top:6px"><input id="teamcode" type="password" autocomplete="off" placeholder="team code"> <button class="primary" id="savecode">Save</button></span>
+    <strong>First time here?</strong> Enter your name and the team code from your coach (saved in this browser):
+    <span class="row" style="margin-top:6px"><input id="studentname" type="text" autocomplete="name" placeholder="your name"> <input id="teamcode" type="password" autocomplete="off" placeholder="team code"> <button class="primary" id="savecode">Save</button></span>
+    <span class="status" id="setuperr"></span>
   </section>
 
   <section>
@@ -161,14 +169,28 @@ td.n{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
     <div id="fb"></div>
   </section>
 
+  <section class="card" id="coach" hidden>
+    <h2>Coach view · team practice log</h2>
+    <div class="row" id="coachlogin"><input id="coachcode" type="password" autocomplete="off" placeholder="coach code" style="font:inherit;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)"> <button class="primary" id="coachload">Load log</button> <span class="status" id="coachstatus"></span></div>
+    <div id="coachbody" hidden>
+      <div class="tscroll"><table id="coachsum">
+        <thead><tr><th>Student</th><th style="text-align:right">Answers</th><th style="text-align:right">Avg</th><th>Awards practiced</th><th>Last practiced</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+      <h3 style="font-family:var(--display);font-size:1rem;letter-spacing:.06em;text-transform:uppercase;margin:18px 0 6px">All answers, newest first <span class="status" id="coachfilter"></span></h3>
+      <div id="coachlist"></div>
+    </div>
+  </section>
+
   <section class="card">
     <h2>This session</h2>
     <div class="tscroll"><table id="hist" hidden>
       <thead><tr><th>Award</th><th>Question</th><th style="text-align:right">Score</th></tr></thead>
       <tbody></tbody>
     </table></div>
-    <p class="empty" id="histempty">No answers graded yet. Scores stay in this browser only.</p>
+    <p class="empty" id="histempty">No answers graded yet.</p>
   </section>
+  <p class="status" style="text-align:right"><a href="#coach" id="coachlink" style="color:var(--muted)">Coach view</a> · <span id="whoami"></span></p>
 </div>
 
 <script>
@@ -356,19 +378,26 @@ const Q = [
 // ---------- State ----------
 const $ = s => document.querySelector(s);
 let filter = "All", current = null, recent = [], history = [];
-let timerId = null, seconds = 120, teamCode = "";
+let timerId = null, seconds = 120, teamCode = "", studentName = "";
+try { studentName = localStorage.getItem("jp.name") || ""; } catch(e){}
 try { history = JSON.parse(localStorage.getItem("jp.history") || "[]"); } catch(e){ history = []; }
 try { filter = localStorage.getItem("jp.filter") || "All"; } catch(e){}
 try { teamCode = localStorage.getItem("jp.code") || ""; } catch(e){}
 
 // ---------- Team code ----------
+function showWho(){ $("#whoami").textContent = studentName ? "Practicing as " + studentName : ""; }
 if (RELAY_URL) {
-  $("#setup").hidden = !!teamCode;
+  $("#setup").hidden = !!(teamCode && studentName);
+  $("#studentname").value = studentName;
   $("#savecode").addEventListener("click", () => {
-    teamCode = $("#teamcode").value.trim();
-    try { localStorage.setItem("jp.code", teamCode); } catch(e){}
-    $("#setup").hidden = !!teamCode;
+    const n = $("#studentname").value.trim(), c = $("#teamcode").value.trim() || teamCode;
+    if (!n || !c) { $("#setuperr").textContent = "Both your name and the team code are needed."; $("#setuperr").className = "status err"; return; }
+    studentName = n; teamCode = c;
+    try { localStorage.setItem("jp.code", teamCode); localStorage.setItem("jp.name", studentName); } catch(e){}
+    $("#setup").hidden = true; showWho();
   });
+  showWho();
+  $("#whoami").addEventListener("click", () => { $("#setup").hidden = false; $("#studentname").focus(); });
 } else {
   $("#typehint").textContent = "AI feedback is not set up on this site yet (see README). You can still draw questions and time your answers.";
 }
@@ -491,13 +520,13 @@ $("#grade").addEventListener("click", async () => {
   const st = $("#gradestatus"); st.className = "status"; st.textContent = "";
   const fb = $("#fb"); $("#feedback").hidden = false;
   if (!RELAY_URL) { fb.innerHTML = "<p class='empty'>AI feedback isn’t set up on this site. Review your answer against the “What judges listen for” list above: did you give a specific example for each item, and did you say how you measured or tested it?</p>"; btn.disabled = false; return; }
-  if (!teamCode) { $("#setup").hidden = false; fb.innerHTML = "<p class='empty'>Enter the team code at the top of the page first.</p>"; btn.disabled = false; return; }
+  if (!teamCode || !studentName) { $("#setup").hidden = false; fb.innerHTML = "<p class='empty'>Enter your name and the team code at the top of the page first.</p>"; btn.disabled = false; return; }
   fb.innerHTML = '<p class="stream">Judge is writing notes…</p>';
   const a = AWARDS[current.award];
   const spoken = Math.max(60, Math.round(120 - seconds));
   try {
     const r = await fetch(RELAY_URL, { method: "POST", headers: { "Content-Type": "application/json", "X-Team-Code": teamCode },
-      body: JSON.stringify({ award: current.award, blurb: a.blurb, criteria: a.criteria, question: current.text, followups: current.follow, answer: text, seconds: spoken }) });
+      body: JSON.stringify({ award: current.award, blurb: a.blurb, criteria: a.criteria, question: current.text, followups: current.follow, answer: text, seconds: spoken, student: studentName }) });
     if (r.status === 401) { fb.innerHTML = "<p class='empty'>That team code isn’t right. Ask your coach and enter it again.</p>"; try{localStorage.removeItem("jp.code");}catch(e){} teamCode = ""; $("#setup").hidden = false; return; }
     if (!r.ok) {
       let detail = "";
@@ -574,6 +603,59 @@ function renderHistory(){
   });
 }
 renderHistory();
+
+// ---------- Coach view (#coach) ----------
+let coachCode = ""; try { coachCode = sessionStorage.getItem("jp.coach") || ""; } catch(e){}
+function syncCoach(){ const on = location.hash === "#coach"; $("#coach").hidden = !on; if (on) { $("#coachcode").value = coachCode; if (coachCode) loadLog(); $("#coach").scrollIntoView({block:"start"}); } }
+addEventListener("hashchange", syncCoach); syncCoach();
+$("#coachload").addEventListener("click", () => { coachCode = $("#coachcode").value.trim(); try { sessionStorage.setItem("jp.coach", coachCode); } catch(e){} loadLog(); });
+let logRows = [], logFilter = "";
+async function loadLog(){
+  const st = $("#coachstatus"); st.className = "status"; st.textContent = "Loading…";
+  if (!RELAY_URL) { st.textContent = "Relay not configured."; return; }
+  try {
+    const r = await fetch(RELAY_URL.replace(/\/$/, "") + "/log", { headers: { "X-Coach-Code": coachCode } });
+    const data = await r.json().catch(() => ({}));
+    if (r.status === 401) { st.className = "status err"; st.textContent = "That coach code isn’t right."; return; }
+    if (!r.ok) { st.className = "status err"; st.textContent = data.error || ("HTTP " + r.status); return; }
+    logRows = data.attempts || []; logFilter = "";
+    st.textContent = logRows.length ? logRows.length + " answers" + (data.total > logRows.length ? " (newest " + logRows.length + " of " + data.total + ")" : "") : "No graded answers yet.";
+    $("#coachbody").hidden = false; renderLog();
+  } catch (e) { st.className = "status err"; st.textContent = "Couldn’t reach the relay."; }
+}
+function renderLog(){
+  const by = {};
+  logRows.forEach(a => { (by[a.student] = by[a.student] || []).push(a); });
+  const tb = $("#coachsum tbody"); tb.innerHTML = "";
+  Object.entries(by).sort((x,y) => y[1][0].t - x[1][0].t).forEach(([name, list]) => {
+    const tr = el("tr");
+    const nameCell = el("td"); const b = el("button","chip small", name); b.setAttribute("aria-pressed", String(logFilter === name));
+    b.addEventListener("click", () => { logFilter = logFilter === name ? "" : name; renderLog(); }); nameCell.appendChild(b); tr.appendChild(nameCell);
+    tr.appendChild(el("td","n", String(list.length)));
+    tr.appendChild(el("td","n", (list.reduce((s,a) => s + a.overall, 0) / list.length).toFixed(1)));
+    tr.appendChild(el("td",null,[...new Set(list.map(a => a.award))].join(", ")));
+    tr.appendChild(el("td",null,ago(list[0].t)));
+    tb.appendChild(tr);
+  });
+  $("#coachfilter").textContent = logFilter ? "· showing " + logFilter + " (click the name again for everyone)" : "";
+  const box = $("#coachlist"); box.innerHTML = "";
+  logRows.filter(a => !logFilter || a.student === logFilter).forEach(a => {
+    const d = document.createElement("details"); d.className = "att";
+    const sm = document.createElement("summary");
+    const p = el("span","pill", String(a.overall)); p.dataset.s = String(a.overall); sm.appendChild(p);
+    const mid = el("div"); mid.appendChild(el("div","name", a.student + " · " + a.award)); mid.appendChild(el("div","meta", a.question)); sm.appendChild(mid);
+    sm.appendChild(el("span","meta", ago(a.t))); d.appendChild(sm);
+    const body = el("div","body");
+    body.appendChild(el("div",null,"Judge: " + a.verdict));
+    const bq = document.createElement("blockquote"); bq.textContent = a.answer; body.appendChild(bq);
+    if (a.improve && a.improve.length) { const ul = el("ul"); ul.style.margin = "0"; ul.style.paddingLeft = "18px"; a.improve.forEach(i => ul.appendChild(el("li",null,i))); body.appendChild(el("div","meta","To improve:")); body.appendChild(ul); }
+    const del = el("button","ghost","Remove this entry"); del.style.justifySelf = "start"; del.style.padding = "4px 10px"; del.style.fontSize = ".85rem";
+    del.addEventListener("click", async () => { del.disabled = true; try { await fetch(RELAY_URL.replace(/\/$/, "") + "/log?id=" + encodeURIComponent(a.id), { method: "DELETE", headers: { "X-Coach-Code": coachCode } }); logRows = logRows.filter(x => x.id !== a.id); renderLog(); } catch(e){ del.disabled = false; } });
+    body.appendChild(del);
+    d.appendChild(body); box.appendChild(d);
+  });
+}
+function ago(t){ const m = Math.round((Date.now() - t)/60000); if (m < 2) return "just now"; if (m < 60) return m + " min ago"; const h = Math.round(m/60); if (h < 36) return h + " h ago"; const d = Math.round(h/24); if (d < 14) return d + " d ago"; return new Date(t).toLocaleDateString(); }
 </script>
 </body>
 </html>

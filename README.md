@@ -40,6 +40,19 @@ The web page can't hold your API key (anyone could read it from the page source)
    The `ALLOWED_ORIGIN` restriction means only your GitHub Pages site can use the relay. Leave it out while testing locally, then add it.
 6. Copy the worker URL shown on its overview page (looks like `https://ftc-judge-relay.<your-account>.workers.dev`).
 
+## Part 2b — Turn on the coach view (practice log)
+
+Every graded answer can be stored so a coach can see who practiced what, read the answers, and see the judge's notes. Storage is Cloudflare KV (free: 1 GB, 100k reads/day).
+
+1. Cloudflare dashboard → **Storage & Databases → KV** → **Create** → name it `ftc-attempts` → Create.
+2. Back in **Workers & Pages → ftc-judge-relay → Settings → Bindings** → **Add** → **KV namespace**. Variable name `ATTEMPTS`, namespace `ftc-attempts`. Save (or Deploy).
+3. In **Settings → Variables and Secrets** add a secret `COACH_CODE` with a code only coaches know (different from `TEAM_CODE`).
+4. Open the site with `#coach` on the end of the URL (or click the small **Coach view** link at the bottom of the page), enter the coach code, **Load log**.
+
+The coach view shows one row per student (answers, average score, awards practiced, last practiced) and every answer newest first; click an answer to read the transcript and the judge's suggestions. "Remove this entry" deletes a single answer.
+
+Students are identified by the name they type the first time they open the page; it's saved in their browser alongside the team code. They can change it by clicking "Practicing as …" at the bottom of the page.
+
 ## Part 3 — Connect the page to the relay
 
 1. Open `index.html` and find the configuration block near the top of the `<script>`:
@@ -75,4 +88,4 @@ Questions live in the `Q` array in `index.html`, one line each: `["Award", "Ques
 
 ## Privacy
 
-Student answers are sent to the relay and on to the Anthropic API for grading, and are not stored by this app. Scores and history stay in each student's own browser (localStorage). No accounts, no tracking.
+Student answers are sent to the relay and on to the Anthropic API for grading. If the coach view is set up (Part 2b), each graded answer (student's first name as typed, question, transcript, score, judge's notes) is stored in your own Cloudflare KV namespace, readable only with the coach code; coaches can delete entries from the coach view. Without Part 2b nothing is stored server-side. Score history also stays in each student's own browser (localStorage). No accounts, no tracking.
