@@ -74,6 +74,12 @@ Draw a question, answer it, click **Get judge feedback**. The first answer confi
 
 Double-click `index.html`. Everything works except AI feedback (browsers block relay calls from `file://` pages). Fine for timed practice at a meeting.
 
+## The team fact sheet (`team.js`)
+
+`team.js` holds a plain-text summary of the team's engineering portfolio. The page sends it with every grading request, so the judge feedback checks answers against what the team actually did, points out the specific facts a student left out, and writes its "stronger version" with the team's real numbers and events. It also powers the **Show talking points** button on each question.
+
+Update it whenever the portfolio changes: edit `team.js` on GitHub and commit. Keep it factual and in the team's words; numbers, event names and dates are what judges reward. It is public (the repo is public), so leave out anything you wouldn't put in the portfolio handed to judges.
+
 ## Updating the questions
 
 Questions live in the `Q` array in `index.html`, one line each: `["Award", "Question text", ["follow-up 1", "follow-up 2"]]`. Award criteria live in the `AWARDS` object just above. When FIRST posts a new Judging Question Bank revision, edit those lines and commit.

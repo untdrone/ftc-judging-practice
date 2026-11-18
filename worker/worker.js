@@ -56,12 +56,31 @@ export default {
 
     let body;
     try { body = await request.json(); } catch { return json({ error: "bad JSON" }, 400, cors); }
-    const { award, blurb, criteria, question, followups = [], answer, seconds = 90, student = "" } = body || {};
-    if (!award || !question || !answer || !Array.isArray(criteria)) return json({ error: "missing fields" }, 400, cors);
+    const { award, blurb, criteria, question, followups = [], answer, seconds = 90, student = "", team = "", mode = "grade" } = body || {};
+    if (!award || !question || !Array.isArray(criteria)) return json({ error: "missing fields" }, 400, cors);
+    if (String(team).length > 12000) return json({ error: "team sheet too long" }, 413, cors);
+    const teamBlock = team ? `\nTEAM FACT SHEET (from the team's engineering portfolio; treat as ground truth about this team):\n"""\n${team}\n"""\n` : "";
+
+    // ---- Talking points: what a strong answer to this question would cover, from the fact sheet
+    if (mode === "hints") {
+      const hp = `You are a FIRST Tech Challenge coach helping a student prepare for the judging interview.
+${teamBlock}
+AWARD: ${award} Award — ${blurb || ""}
+AWARD CRITERIA: ${criteria.join("; ")}
+QUESTION: ${question}${followups.length ? "\nFOLLOW-UPS: " + followups.join(" | ") : ""}
+
+Write 4-6 short talking points a student on THIS team should hit when answering, drawn only from the fact sheet (never invent facts; if the sheet has nothing for a point, say what kind of detail the student should add from their own experience, in [brackets]). Each point: one line, concrete, with the real numbers, names of events, tools or methods from the sheet. Then one line "Shape:" describing a 60-90 second structure for the answer.
+Return ONLY JSON: {"points": ["..."], "shape": "..."}`;
+      const hr = await callClaude(env, hp, 900);
+      if (!hr.ok) return json({ error: "upstream " + hr.status, detail: hr.detail }, 502, cors);
+      try { return json(extractJson(hr.text), 200, cors); } catch { return json({ error: "could not parse hints", detail: hr.text.slice(0, 400) }, 502, cors); }
+    }
+
+    if (!answer) return json({ error: "missing fields" }, 400, cors);
     if (answer.length > 6000) return json({ error: "answer too long" }, 413, cors);
 
     const prompt = `You are an experienced FIRST Tech Challenge judge giving coaching feedback to a student after a practice interview answer. Be specific, encouraging, and direct. Students are usually 13–18 years old.
-
+${teamBlock}
 AWARD: ${award} Award
 AWARD PURPOSE: ${blurb || ""}
 AWARD CRITERIA (from the FTC Competition Manual):
@@ -76,6 +95,7 @@ ${answer}
 """
 
 Evaluate how well the answer would help this team be a contender for this award. Judges value: specific examples with names, numbers, and dates over generalities; evidence (data, tests, documents) over claims; a clear structure (situation → what we did → result → what we learned); the whole team being able to speak; staying within about two minutes.
+${team ? `Use the TEAM FACT SHEET: (a) reward answers that cite the team's real work; (b) in "improve", name the specific facts from the sheet the student left out that would have strengthened the answer (e.g. the actual numbers, events, methods); (c) if the student says something that contradicts the sheet, point it out gently as "check this against the portfolio"; (d) write the "model" answer using the team's real facts, in the student's voice, with no bracket placeholders except for things the sheet does not cover.` : ""}
 
 Return ONLY a JSON object with this exact shape and nothing else:
 {
@@ -89,22 +109,9 @@ Return ONLY a JSON object with this exact shape and nothing else:
 }
 Score every criterion listed above, in order. Use 1 = not addressed, 3 = mentioned without evidence, 5 = specific, evidenced, and clearly tied to the criterion.`;
 
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": env.ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: env.MODEL || "claude-sonnet-5-5",
-        max_tokens: 3000,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
-    if (!r.ok) return json({ error: "upstream " + r.status, detail: await r.text() }, 502, cors);
-    const out = await r.json();
-    const text = (out.content || []).map(c => c.text || "").join("");
+    const res = await callClaude(env, prompt, 3000);
+    if (!res.ok) return json({ error: "upstream " + res.status, detail: res.detail }, 502, cors);
+    const out = res.out, text = res.text;
     const done = async (fb) => {
       if (env.ATTEMPTS && fb && typeof fb.overall === "number") {
         const t = Date.now();
@@ -139,4 +146,21 @@ Score every criterion listed above, in order. Use 1 = not addressed, 3 = mention
 
 function json(obj, status, headers) {
   return new Response(JSON.stringify(obj), { status, headers });
+}
+
+async function callClaude(env, prompt, maxTokens) {
+  const r = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+    body: JSON.stringify({ model: env.MODEL || "claude-sonnet-5-5", max_tokens: maxTokens, messages: [{ role: "user", content: prompt }] }),
+  });
+  if (!r.ok) return { ok: false, status: r.status, detail: await r.text() };
+  const out = await r.json();
+  return { ok: true, out, text: (out.content || []).map(c => c.text || "").join("") };
+}
+
+function extractJson(text) {
+  const t = text.replace(/```(?:json)?/gi, "").trim();
+  const start = t.indexOf("{"), end = t.lastIndexOf("}");
+  return JSON.parse(t.slice(start, end + 1));
 }

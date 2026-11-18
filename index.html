@@ -144,6 +144,13 @@ td.n{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
     <div class="row" style="margin-top:14px">
       <button class="primary" id="draw">Draw a question</button>
       <button class="ghost" id="hear" hidden>Hear the judge ask it</button>
+      <button class="ghost" id="hints" hidden>Show talking points</button>
+      <span class="status" id="hintstatus"></span>
+    </div>
+    <div class="model" id="hintbox" hidden>
+      <h3>Talking points from our portfolio</h3>
+      <ul id="hintlist" style="margin:0;padding-left:18px"></ul>
+      <p id="hintshape" class="hint"></p>
     </div>
   </section>
 
@@ -193,6 +200,7 @@ td.n{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
   <p class="status" style="text-align:right"><a href="#coach" id="coachlink" style="color:var(--muted)">Coach view</a> · <span id="whoami"></span></p>
 </div>
 
+<script src="team.js"></script>
 <script>
 // ===================== CONFIGURATION =====================
 // After you deploy the Cloudflare Worker (see README.md), paste its URL here.
@@ -439,6 +447,8 @@ function showQuestion(q){
   c.hidden = false;
   $("#draw").textContent = "Draw another";
   $("#hear").hidden = !("speechSynthesis" in window);
+  $("#hints").hidden = !(RELAY_URL && typeof TEAM === "string" && TEAM.trim());
+  $("#hints").textContent = "Show talking points"; $("#hintbox").hidden = true; $("#hintstatus").textContent = "";
   resetAnswer();
   $("#feedback").hidden = true;
 }
@@ -510,6 +520,33 @@ $("#hear").addEventListener("click", () => {
   speechSynthesis.speak(u);
 });
 
+// ---------- Talking points (from the team fact sheet) ----------
+const hintCache = {};
+$("#hints").addEventListener("click", async () => {
+  if (!current) return;
+  const box = $("#hintbox"), btn = $("#hints"), st = $("#hintstatus");
+  if (!box.hidden) { box.hidden = true; btn.textContent = "Show talking points"; return; }
+  if (!teamCode) { $("#setup").hidden = false; st.textContent = "Enter the team code first."; return; }
+  const key = current.text;
+  if (!hintCache[key]) {
+    btn.disabled = true; st.textContent = "Coach is thinking…";
+    try {
+      const a = AWARDS[current.award];
+      const r = await fetch(RELAY_URL, { method: "POST", headers: { "Content-Type": "application/json", "X-Team-Code": teamCode },
+        body: JSON.stringify({ mode: "hints", award: current.award, blurb: a.blurb, criteria: a.criteria, question: current.text, followups: current.follow, team: TEAM }) });
+      if (r.status === 401) { st.textContent = "That team code isn’t right."; st.className = "status err"; return; }
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      hintCache[key] = await r.json();
+    } catch (e) { st.className = "status err"; st.textContent = "Couldn’t load talking points (" + e.message + ")."; return; }
+    finally { btn.disabled = false; }
+  }
+  st.className = "status"; st.textContent = "";
+  const ul = $("#hintlist"); ul.innerHTML = "";
+  (hintCache[key].points || []).forEach(p => ul.appendChild(el("li", null, p)));
+  $("#hintshape").textContent = hintCache[key].shape ? "Shape: " + hintCache[key].shape : "";
+  box.hidden = false; btn.textContent = "Hide talking points";
+});
+
 // ---------- Feedback via relay ----------
 $("#grade").addEventListener("click", async () => {
   if (!current) return;
@@ -526,7 +563,7 @@ $("#grade").addEventListener("click", async () => {
   const spoken = Math.max(60, Math.round(120 - seconds));
   try {
     const r = await fetch(RELAY_URL, { method: "POST", headers: { "Content-Type": "application/json", "X-Team-Code": teamCode },
-      body: JSON.stringify({ award: current.award, blurb: a.blurb, criteria: a.criteria, question: current.text, followups: current.follow, answer: text, seconds: spoken, student: studentName }) });
+      body: JSON.stringify({ award: current.award, blurb: a.blurb, criteria: a.criteria, question: current.text, followups: current.follow, answer: text, seconds: spoken, student: studentName, team: (typeof TEAM === "string" ? TEAM : "") }) });
     if (r.status === 401) { fb.innerHTML = "<p class='empty'>That team code isn’t right. Ask your coach and enter it again.</p>"; try{localStorage.removeItem("jp.code");}catch(e){} teamCode = ""; $("#setup").hidden = false; return; }
     if (!r.ok) {
       let detail = "";
