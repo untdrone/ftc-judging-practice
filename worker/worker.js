@@ -77,7 +77,7 @@ Score every criterion listed above, in order. Use 1 = not addressed, 3 = mention
       },
       body: JSON.stringify({
         model: env.MODEL || "claude-sonnet-5-5",
-        max_tokens: 1200,
+        max_tokens: 3000,
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -85,10 +85,23 @@ Score every criterion listed above, in order. Use 1 = not addressed, 3 = mention
     const out = await r.json();
     const text = (out.content || []).map(c => c.text || "").join("");
     try {
-      const start = text.indexOf("{"), end = text.lastIndexOf("}");
-      return json(JSON.parse(text.slice(start, end + 1)), 200, cors);
+      let t = text.replace(/```(?:json)?/gi, "").trim();
+      const start = t.indexOf("{"), end = t.lastIndexOf("}");
+      if (start < 0) throw new Error("no JSON");
+      t = t.slice(start, end > start ? end + 1 : undefined);
+      // Tolerate a reply cut off mid-way: close any open strings, arrays and objects.
+      try { return json(JSON.parse(t), 200, cors); } catch {}
+      const stack = []; let inStr = false, esc = false;
+      for (const ch of t) {
+        if (inStr) { if (esc) esc = false; else if (ch === "\\") esc = true; else if (ch === '"') inStr = false; continue; }
+        if (ch === '"') inStr = true; else if (ch === "{") stack.push("}"); else if (ch === "[") stack.push("]"); else if (ch === "}" || ch === "]") stack.pop();
+      }
+      if (inStr) t += '"';
+      t = t.replace(/,\s*$/, "").replace(/:\s*$/, ': null');
+      t += stack.reverse().join("");
+      return json(JSON.parse(t), 200, cors);
     } catch {
-      return json({ error: "could not parse feedback", raw: text }, 502, cors);
+      return json({ error: "could not parse feedback", detail: "stop_reason=" + out.stop_reason + "; reply: " + text.slice(0, 400) }, 502, cors);
     }
   },
 };
