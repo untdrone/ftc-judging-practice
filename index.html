@@ -27,7 +27,14 @@
 body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:17px;line-height:1.5;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 48px}
 .wrap{max-width:760px;margin:0 auto;display:grid;gap:20px}
-header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-block:22px 4px;border-bottom:2px solid var(--fg)}
+header{display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding-block:18px 10px;border-bottom:2px solid var(--fg)}
+header>div{flex:1 1 300px;min-width:0}
+.logo{height:72px;width:auto;flex:0 0 auto}
+.celebrate{display:flex;align-items:center;gap:12px;background:var(--accent);color:var(--accent-fg);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-weight:600}
+.celebrate .logo{height:44px;animation:wiggle .9s ease-in-out 2}
+@keyframes wiggle{0%,100%{transform:rotate(0)}25%{transform:rotate(-8deg)}75%{transform:rotate(8deg)}}
+#confetti{position:fixed;inset:0;pointer-events:none;z-index:50}
+@media (prefers-reduced-motion:reduce){.celebrate .logo{animation:none}}
 h1{font-family:var(--display);font-weight:700;font-size:2.4rem;line-height:1;margin:0;letter-spacing:.01em;text-wrap:balance}
 h1 span{color:var(--accent)}
 .sub{color:var(--muted);font-size:.95rem;margin:0}
@@ -104,6 +111,7 @@ td.n{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
 <body>
 <div class="wrap">
   <header>
+    <img class="logo" src="logo.png" alt="RustyCrabs team logo" width="188" height="116">
     <div>
       <h1>Judging <span>Practice</span> Pit</h1>
       <p class="sub">FTC BIOBUZZ 2026–27 · questions from the official Judging Question Bank · feedback scored against the Competition Manual award criteria</p>
@@ -508,8 +516,33 @@ $("#grade").addEventListener("click", async () => {
 });
 
 function el(tag, cls, text){ const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+const CHEERS = ["Judge-ready answer!", "That’s award-table material.", "The judges would be writing fast.", "Pin that answer to the pit wall.", "Clean, specific, evidenced. Nice."];
+function celebrate(score){
+  const c = el("div","celebrate");
+  const img = document.createElement("img"); img.className = "logo"; img.src = "logo.png"; img.alt = ""; c.appendChild(img);
+  c.appendChild(el("span",null,(score === 5 ? "5 out of 5! " : "4 out of 5! ") + CHEERS[Math.floor(Math.random()*CHEERS.length)]));
+  if (!matchMedia("(prefers-reduced-motion: reduce)").matches) confetti();
+  return c;
+}
+function confetti(){
+  let cv = document.getElementById("confetti");
+  if (!cv) { cv = document.createElement("canvas"); cv.id = "confetti"; document.body.appendChild(cv); }
+  const ctx = cv.getContext("2d"), dpr = Math.min(2, devicePixelRatio || 1);
+  cv.width = innerWidth * dpr; cv.height = innerHeight * dpr; ctx.scale(dpr, dpr);
+  const colors = ["#e8701a","#f5b041","#ffffff","#8c8c8c","#2f7d4f"];
+  const parts = Array.from({length: 140}, () => ({ x: innerWidth/2 + (Math.random()-0.5)*innerWidth*0.4, y: innerHeight*0.35, vx: (Math.random()-0.5)*14, vy: -Math.random()*14 - 4, r: 4 + Math.random()*5, a: Math.random()*Math.PI, va: (Math.random()-0.5)*0.3, c: colors[Math.floor(Math.random()*colors.length)] }));
+  const t0 = performance.now();
+  (function frame(now){
+    const t = (now - t0) / 1000;
+    ctx.clearRect(0, 0, innerWidth, innerHeight);
+    parts.forEach(p => { p.vy += 0.35; p.x += p.vx; p.y += p.vy; p.vx *= 0.99; p.a += p.va;
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.a); ctx.fillStyle = p.c; ctx.globalAlpha = Math.max(0, 1 - Math.max(0, t - 1.8)); ctx.fillRect(-p.r/2, -p.r/3, p.r, p.r/1.5); ctx.restore(); });
+    if (t < 2.6) requestAnimationFrame(frame); else { ctx.clearRect(0, 0, innerWidth, innerHeight); cv.remove(); }
+  })(t0);
+}
 function renderFeedback(d){
   const fb = $("#fb"); fb.innerHTML = "";
+  if (d.overall >= 4) fb.appendChild(celebrate(d.overall));
   const score = el("div","score");
   const big = el("div","big", String(d.overall)); big.appendChild(el("small",null," / 5")); score.appendChild(big);
   score.appendChild(el("p","verdict", d.verdict || "")); fb.appendChild(score);
