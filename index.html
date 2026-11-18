@@ -491,7 +491,11 @@ $("#grade").addEventListener("click", async () => {
     const r = await fetch(RELAY_URL, { method: "POST", headers: { "Content-Type": "application/json", "X-Team-Code": teamCode },
       body: JSON.stringify({ award: current.award, blurb: a.blurb, criteria: a.criteria, question: current.text, followups: current.follow, answer: text, seconds: spoken }) });
     if (r.status === 401) { fb.innerHTML = "<p class='empty'>That team code isn’t right. Ask your coach and enter it again.</p>"; try{localStorage.removeItem("jp.code");}catch(e){} teamCode = ""; $("#setup").hidden = false; return; }
-    if (!r.ok) throw new Error("HTTP " + r.status);
+    if (!r.ok) {
+      let detail = "";
+      try { const e = await r.json(); detail = e.detail || e.error || ""; try { const d = JSON.parse(detail); detail = (d.error && d.error.message) || detail; } catch(_){} } catch(_){}
+      throw new Error("HTTP " + r.status + (detail ? ": " + String(detail).slice(0, 300) : ""));
+    }
     const data = await r.json();
     renderFeedback(data);
     history.unshift({ award: current.award, q: current.text, score: data.overall, t: Date.now() });
